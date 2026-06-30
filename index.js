@@ -5,7 +5,7 @@ import { initializeApp } from 'firebase/app';
 
 // Add the Firebase products and methods that you want to use
 import { getAuth, EmailAuthProvider, signOut, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, addDoc, collection, query, orderBy, onSnapshot, doc, setDoc } from 'firebase/firestore';
+import { getFirestore, addDoc, collection, query, orderBy, onSnapshot, doc, setDoc, where } from 'firebase/firestore';
 
 import * as firebaseui from 'firebaseui';
 
@@ -75,10 +75,12 @@ async function main() {
       startRsvpButton.textContent = 'LOGOUT';
       guestbookContainer.style.display = 'block';
       subscribeGuestbook();
+      subscribeCurrentRSVP(user);
     } else {
       startRsvpButton.textContent = 'RSVP';
       guestbookContainer.style.display = 'none';
       unsubscribeGuestbook();
+      unsubscribeCurrentRSVP();
     }
   });
 
@@ -122,28 +124,63 @@ async function main() {
   // Listen to RSVP responses
   rsvpYes.onclick = async () => {
     // Get a reference to the user's document in the attendees collection
-      const userRef = doc(db, 'attendees', auth.currentUser.uid);
+    const userRef = doc(db, 'attendees', auth.currentUser.uid);
 
-      // If they rsvp'd yes, save a documnet with attending: true
-      try {
-        await setDoc(userRef, {
-          attending: true
-        })
-      } catch (e) {
-        console.error(e);
-      }
+    // If they rsvp'd yes, save a documnet with attending: true
+    try {
+      await setDoc(userRef, {
+        attending: true
+      })
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   rsvpNo.onclick = async () => {
-      const userRef = doc(db, 'attendees', auth.currentUser.uid);
+    const userRef = doc(db, 'attendees', auth.currentUser.uid);
 
-      try {
-        await setDoc(userRef, {
-          attending: false
-        })
-      } catch (e) {
-        console.error(e);
-      }
+    try {
+      await setDoc(userRef, {
+        attending: false
+      })
+    } catch (e) {
+      console.error(e);
+    }
   };
+
+  const attendingQuery = query(collection(db, 'attendees'), where('attending', '==', true));
+
+  const unsubscribe = onSnapshot(attendingQuery, snap => {
+    const newAttendeeCount = snap.docs.length;
+    numberAttending.innerHTML = newAttendeeCount + ' people going';
+  });
+
+  // Listen for attendee list
+  function subscribeCurrentRSVP(user) {
+    const ref = doc(db, 'attendees', user.uid);
+    rsvpListener = onSnapshot(ref, doc => {
+      if (doc && doc.data()) {
+        const attendingResponse = doc.data().attending;
+
+        // Update css classes for buttons
+        if (attendingResponse) {
+          rsvpYes.className = 'clicked';
+          rsvpNo.className = '';
+        } else {
+          rsvpYes.className = '';
+          rsvpNo.className = 'clicked';
+        }
+      }
+    });
+  }
+
+  function unsubscribeCurrentRSVP() {
+    if (rsvpListener != null) {
+      rsvpListener();
+      rsvpListener = null;
+    }
+    rsvpYes.className = '';
+    rsvpNo.className = '';
+  }
 }
 main();
